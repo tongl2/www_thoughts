@@ -1,7 +1,7 @@
-# tongl2.github.io
+# thoughts.liuto.ng
 
 # Build up: TODO
 - [ ] Change Theme
-- [ ] Change URL
+- [x] Change URL
 - [ ] Organize Pages
 - [ ] Create Publishing Workflow
