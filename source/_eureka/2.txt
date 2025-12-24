@@ -1,0 +1,4 @@
+Mark一些好东西
+https://infrasys-ai.github.io/
+https://jax-ml.github.io/scaling-book/
+https://thegradient.pub/understanding-evaluation-metrics-for-language-models/
