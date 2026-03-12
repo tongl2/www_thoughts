@@ -1,15 +1,21 @@
 ---
-title: Brief about FSDP(WIP)
+title: FSDP简介(WIP)
+author: 刘通
 date:
 updated:
-tags: torch,fsdp,training,ai,llm,transformers
+tags: 
+  - PyTorch
+  - FSDP
+  - Training
+  - AI
+  - LLM
+  - Transformers
 categories:
 ---
-# FSDP简介
 
-## Recap：线性层训练过程、GPU（NPU）内存与DP并行
+# Recap：线性层训练过程、GPU（NPU）内存与DP并行
 
-### 一次最简单的训练
+## 一次最简单的训练
 
 让我们从一个最简单的单卡训练场景开始：我们会看到，在单卡上训练一个不带偏置项的线性层 $Y = XW^\top$ ，需要**3处关键的MatMul**。假设输入维度为 $D_{in}$ ，输出维度为 $D_{out}$ ，batch size为 $B$ ，序列长度为 $L$ 。输入数据 $X$ 的shape为 $(B, L, D_{in})$ ，权重矩阵 $W$ 的shape为 $(D_{out}, D_{in})$ 。
 
@@ -41,7 +47,7 @@ $$
 W \Leftarrow W - lr \cdot \frac{m}{\sqrt{v}} \quad \text{其中}lr\text{是超参数，代表learning rate}
 $$
 
-### GPU（NPU）内存占用
+## GPU（NPU）内存占用
 
 当前主流大模型的线性层使用BF16训练，即三次MatMul的操作数都是BF16。这样产生的激活值和权重的dtype都是BF16，然而，为了保证数值稳定性，优化器状态 $m$ 和 $v$ 仍需高精度（FP32）存储。每层Linear都需要在卡上存储的Tensor（不包含计算时临时生成、用完即释放的Tensor）及其属性如下：
 
@@ -56,7 +62,7 @@ $$
 
 可见，权重梯度和优化器状态占据了大量内存空间，导致单卡训练时模型的参数规模受限。对于数十层的模型，单卡显存很快成为瓶颈。
 
-### DP并行训练
+## DP并行训练
 
 为了突破单卡内存限制、增加参数规模和训练吞吐，我们需要分布式训练。**数据并行（Data Parallel, DP）**是一种常见的提升吞吐的并行策略。
 
