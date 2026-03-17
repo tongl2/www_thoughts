@@ -3,7 +3,7 @@ title: FSDP简介(WIP)
 author: 刘通
 date:
 updated:
-tags: 
+tags:
   - PyTorch
   - FSDP
   - Training
@@ -84,3 +84,255 @@ $$
 DP并行可以显著增加训练吞吐：在N张卡组成的集群上，由于输入激活被切分成N份，总吞吐可以扩大N倍。这样的代价是仅需增加一次对 $dW$ 的All-Reduce，而 $dW$ 是用于更新优化器状态和权重的梯度，不参与反向传播到上一层的计算，因此这一次通信不会阻塞反向传播计算的主路径，极易被掩盖。
 
 然而，当模型参数量很大时，权重、权重梯度和优化器状态很容易超过单卡容量，此时即使使用DP也无法加载模型。Torch为此提供的方案是**FSDP（Fully Sharded Data Parallel）**——既切分输入数据，又切分模型参数和优化器状态，在保持DP良好扩展性的同时，解决单卡内存瓶颈。
+
+# 什么是FSDP
+
+![](./img1.jpg)*Image adapted from [Jane Xu - Slaying OOMs with PyTorch FSDP and torchao (YouTube)](https://www.youtube.com/watch?v=UvRl4ansfCg&t=878s)*
+
+DP并行将模型的输入batch切分，大大减少了训练数据中长序列激活值的内存占用。然而，对于参数量很大的模型，训练时大量GPU（NPU）内存被模型参数、梯度和优化器状态占用，这大大限制了单卡上模型的规模。为解决此类问题，Torch实现了FSDP特性。
+
+> 当前主流讨论的FSDP指FSDP2特性，FSDP1已弃用。
+> 与FSDP1相比，FSDP2具有以下优点：
+> - 将分片参数表示为沿dim-i分片的`DTensor`，便于操作单个参数，实现通信零开销的分片state dict，以及更简单的meta-device初始化流程。
+> - 改进了内存管理系统，通过避免`recordStream`来实现更低且确定性的GPU内存占用，并且无需任何CPU同步。
+> - 提供了张量子类扩展点，用于自定义all-gather操作，例如用于float8线性层的float8 all-gather，以及用于QLoRA的NF4。
+> - 可以将冻结和非冻结参数混合在同一个通信组中，而无需额外内存。
+
+![](img2.jpg)*Image from [Jane Xu - Slaying OOMs with PyTorch FSDP and torchao (YouTube)](https://www.youtube.com/watch?v=UvRl4ansfCg&t=878s)*
+
+相较于DP并行，FSDP额外地将权重切片，每卡存储一份。由于梯度和优化器状态的内存占用绑定了权重规模，权重的切片处理会带来更大的内存占用收益。
+
+为继承DP的优势，FSDP的训练计算过程和DP一致。权重仅在静态情况下切片存储；训练过程中，每层会在被执行前进行一次权重的All-Gather通信，收集全部权重，并在执行后全部释放。相应地，每张卡上的梯度会被Reduce-Scatter，每张卡负责维护更新各自的分片优化器状态及权重。
+
+整体上，FSDP的执行规则可以被总结为如下四条：
+- 在前向和后向计算之外，参数被完全分片；
+- 在执行前向和后向计算之前，分片参数会被 all-gather 到非分片参数；
+- 在后向计算中，本地非分片梯度会被 reduce-scatter 到分片梯度；
+- 优化器使用分片梯度更新分片参数，从而产生分片优化器状态。
+
+![](img3.jpg)*Image from [Yanli Zhao, et.al. - PyTorch FSDP: Experiences on Scaling Fully Sharded Data Parallel (arXiv)](https://arxiv.org/pdf/2304.11277)*
+
+# FDSP训练示例
+
+## API说明
+
+## 示例代码
+
+```python
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+FSDP训练程序 - 使用iris数据集训练简单的分类模型
+Usage: torchrun --nproc_per_node=2 iris_fsdp.py
+"""
+
+import os
+import torch
+import torch.nn as nn
+from torch.utils.data import DataLoader, TensorDataset, DistributedSampler
+from torch.distributed.fsdp import fully_shard
+from datasets import load_dataset
+import numpy as np
+
+
+LEARNING_RATE = 0.01      # 学习率
+BATCH_SIZE = 8            # 批大小
+EPOCHS = 25               # 训练轮数
+HIDDEN_SIZE = 8           # 隐藏层神经元数量
+INPUT_SIZE = 4            # 输入特征数量（iris）
+NUM_CLASSES = 3           # 分类数量
+WORLD_SIZE = 2            # 固定进程数为2
+
+
+class IrisClassifier(nn.Module):
+    def __init__(self):
+        super(IrisClassifier, self).__init__()
+        self.fc1 = nn.Linear(INPUT_SIZE, HIDDEN_SIZE, dtype=torch.bfloat16)
+        self.relu = nn.ReLU()
+        self.fc2 = nn.Linear(HIDDEN_SIZE, NUM_CLASSES, dtype=torch.bfloat16)
+        self.softmax = nn.Softmax()
+
+    def forward(self, x):
+        x = self.fc1(x)
+        x = self.relu(x)
+        x = self.fc2(x)
+        x = self.softmax(x)
+        return x
+
+
+def print_log(s):
+    print(f'[{rank}] {s}\n', end='', flush=True)
+
+
+def train_test_split_torch(x, y, test_size=0.2, random_state=42):
+    """使用 PyTorch 和 NumPy 实现数据集划分"""
+    torch.manual_seed(random_state)
+    np.random.seed(random_state)
+
+    num_samples = x.shape[0]
+    indices = np.random.permutation(num_samples)
+    split_idx = int(num_samples * (1 - test_size))
+
+    train_idx = indices[:split_idx]
+    test_idx = indices[split_idx:]
+
+    return x[train_idx], x[test_idx], y[train_idx], y[test_idx]
+
+
+def load_iris_data():
+    """使用 datasets 库加载 iris 数据集并转换为 PyTorch 张量"""
+    dataset = load_dataset("scikit-learn/iris")
+    data = dataset["train"]
+
+    sepal_length = data["SepalLengthCm"]
+    sepal_width = data["SepalWidthCm"]
+    petal_length = data["PetalLengthCm"]
+    petal_width = data["PetalWidthCm"]
+    target = data["Species"]
+
+    x = np.stack([sepal_length, sepal_width, petal_length, petal_width], axis=1)
+    y = np.array(target)
+    _, y = np.unique(y, return_inverse=True)
+
+    x_tensor = torch.tensor(x, dtype=torch.bfloat16)
+    y_tensor = torch.tensor(y, dtype=torch.long)
+
+    x_tensor = (x_tensor - x_tensor.mean(dim=0)) / x_tensor.std(dim=0)
+    y_tensor = nn.functional.one_hot(y_tensor).to(torch.bfloat16)
+
+    x_train, x_test, y_train, y_test = train_test_split_torch(
+        x_tensor, y_tensor, test_size=0.2, random_state=42
+    )
+    return x_train, x_test, y_train, y_test
+
+
+def create_dataloaders(x_train, x_test, y_train, y_test):
+    """创建训练和测试的DataLoader"""
+    train_dataset = TensorDataset(x_train, y_train)
+    test_dataset = TensorDataset(x_test, y_test)
+
+    train_sampler = DistributedSampler(
+        train_dataset,
+        num_replicas=WORLD_SIZE,
+        rank=rank,
+        shuffle=True
+    )
+    test_sampler = DistributedSampler(
+        test_dataset,
+        num_replicas=WORLD_SIZE,
+        rank=rank,
+        shuffle=False
+    )
+
+    train_loader = DataLoader(
+        train_dataset,
+        batch_size=BATCH_SIZE,
+        sampler=train_sampler,
+        drop_last=True
+    )
+
+    test_loader = DataLoader(
+        test_dataset,
+        batch_size=BATCH_SIZE,
+        sampler=test_sampler,
+        drop_last=False
+    )
+
+    return train_loader, test_loader
+
+
+def evaluate(model, dataloader):
+    """评估模型准确率"""
+    model.eval()
+    correct = 0
+    total = 0
+
+    with torch.no_grad():
+        for inputs, labels in dataloader:
+            inputs = inputs.to(device)
+            labels = labels.to(device)
+            _, labels = torch.max(labels, 1)
+
+            outputs = model(inputs)
+            _, predicted = torch.max(outputs.data, 1)
+
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+
+    # 同步结果
+    correct_tensor = torch.tensor([correct], device=device)
+    total_tensor = torch.tensor([total], device=device)
+    torch.distributed.all_reduce(correct_tensor, op=torch.distributed.ReduceOp.SUM)
+    torch.distributed.all_reduce(total_tensor, op=torch.distributed.ReduceOp.SUM)
+    correct = correct_tensor.item()
+    total = total_tensor.item()
+
+    accuracy = 100 * correct / total if total > 0 else 0
+    return accuracy
+
+
+def train_epoch(model, dataloader, criterion, optimizer):
+    """训练一个epoch"""
+    model.train()
+    total_loss = 0
+    num_batches = 0
+
+    for inputs, labels in dataloader:
+        inputs = inputs.to(device)
+        labels = labels.to(device)
+
+        # 前向传播
+        outputs = model(inputs)
+        loss = criterion(outputs, labels)
+
+        # 反向传播
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        total_loss += loss.item()
+        num_batches += 1
+
+    avg_loss = total_loss / num_batches if num_batches > 0 else 0
+    return avg_loss
+
+
+if __name__ == "__main__":
+    rank = int(os.environ["RANK"])
+    torch.distributed.init_process_group(backend="nccl")
+    torch.cuda.set_device(rank)
+    device = torch.device(f"cuda:{rank}")
+
+    # 设置随机种子（确保可重复性）
+    torch.manual_seed(42)
+    np.random.seed(42)
+    torch.cuda.manual_seed_all(42)
+
+    # 加载数据
+    x_train, x_test, y_train, y_test = load_iris_data()
+    train_loader, test_loader = create_dataloaders(x_train, x_test, y_train, y_test)
+
+    # 创建模型
+    model = IrisClassifier().to(device)
+    model = fully_shard(model)  # <<< 使能FSDP
+
+    # 定义损失函数和优化器
+    criterion = nn.CrossEntropyLoss()
+    optimizer = torch.optim.Adam(model.parameters(), lr=LEARNING_RATE)
+
+    # 训练循环
+    print_log(f"开始训练: {EPOCHS} epochs, 学习率: {LEARNING_RATE}, 批大小: {BATCH_SIZE}")
+    print_log(f"设备: {device}, 进程数: {WORLD_SIZE}")
+
+    for epoch in range(EPOCHS):
+        train_loader.sampler.set_epoch(epoch)  # 设置epoch以确保分布式采样器的随机性
+        train_loss = train_epoch(model, train_loader, criterion, optimizer)
+        test_acc = evaluate(model, test_loader)
+        print_log(f"Epoch [{epoch+1}/{EPOCHS}], Loss: {train_loss:.4f}, Test Accuracy: {test_acc:.2f}%")
+
+    # 最终评估
+    final_acc = evaluate(model, test_loader)
+    print_log(f"训练完成! 最终测试准确率: {final_acc:.2f}%")
+
+    torch.distributed.destroy_process_group()
+```
