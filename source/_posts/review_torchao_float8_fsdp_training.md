@@ -2,6 +2,7 @@
 title: 代码走读：FSDP叠加TorchAO Float8低精训练
 author: 刘通
 date: 2026-3-19 21:36
+updated: 2026-3-27 11:52
 tags:
   - PyTorch
   - FSDP
@@ -119,7 +120,7 @@ flowchart
 ## `precompute_float8_dynamic_scale_for_fsdp`接口
 
 `precompute_float8_dynamic_scale_for_fsdp`的作用是**预计算所有float8权重的scale**。带有预计算scale的权重在后续all-gather操作中，无需重新量化，可以节省开销。
-该函数应该在一次epoch结束优化器更新权重之后、下一次epoch计算之前调用：
+该函数应该在一个batch结束、优化器更新权重之后，下一个batch计算之前调用：
 ```python
 output = model(input)
 loss = output.sum()
@@ -167,7 +168,7 @@ for i, float8_linear in enumerate(float8_linears):
 如果不执行`precompute_float8_dynamic_scale_for_fsdp`，会有以下问题：
 
 1. **多次vs单次**: 不使用预计算时，每个Float8Linear层都需要单独进行all-reduce；使用预计算时，所有层共享一次all-reduce。这节省了通信开销。
-2. **计算冗余**: 在同一epoch中，权重没有变化，scale也不应该变化。预计算权重可以避免每次all-gather前反复重新计算。
+2. **计算冗余**: 在梯度累计时，权重没有变化，scale也不应该变化。预计算权重可以避免每次all-gather前反复重新计算。
 
 使用预计算后的收益：
 - **减少通信次数**: 从N次all-reduce减少到1次（N为Float8Linear层数）。
