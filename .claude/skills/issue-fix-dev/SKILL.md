@@ -67,7 +67,7 @@ description: 用于处理本项目的issue修复和功能开发流程
 
 ### 10. 提交PR
 - 将开发分支代码推送到远端对应分支
-- 创建PR，审查人设为 tongl2
+- 创建PR，Assignees设为 tongl2
 - PR内容包含：
   - 关联对应的issue
   - 修改点说明
