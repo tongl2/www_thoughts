@@ -34,6 +34,11 @@ describe('Hexo build', () => {
     console.log(`  Generated ${files.length} files/directories`);
   });
 
+  test('Verify robots.txt was generated', () => {
+    const robotsPath = join(PUBLIC_DIR, 'robots.txt');
+    assert.ok(existsSync(robotsPath), 'robots.txt not found in public directory');
+  });
+
   after(() => {
     console.log('Cleaning up...');
     execSync('npx hexo clean', { cwd: ROOT_DIR, stdio: 'inherit' });
