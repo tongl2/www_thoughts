@@ -5,7 +5,11 @@
       "Bash(npm outdated:*)",
       "Bash(npm update:*)",
       "Bash(git add:*)",
-      "Bash(git commit -m ':*)"
+      "Bash(git commit -m ':*)",
+      "Bash(git push:*)",
+      "Bash(npx hexo:*)",
+      "Bash(node:*)",
+      "Bash(npm test:*)"
     ]
   }
 }
