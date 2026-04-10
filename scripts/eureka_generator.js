@@ -3,6 +3,22 @@ const path = require('path');
 const moment = require('moment');
 moment.locale('zh-cn');
 
+// 从文件名中解析时间戳
+// 文件名格式: yyyy-MM-DD-HH-MM-SS---X.txt
+function parseTimestampFromFilename(filename) {
+  const separator = '---';
+  const separatorIndex = filename.indexOf(separator);
+
+  if (separatorIndex === -1) {
+    return null;
+  }
+
+  const timestampStr = filename.substring(0, separatorIndex);
+  const time = moment(timestampStr, 'YYYY-MM-DD-HH-mm-ss');
+
+  return time.isValid() ? time : null;
+}
+
 hexo.extend.generator.register('eureka', function(locals) {
   const eurekaDir = path.join(hexo.source_dir, '_eureka');
   let eurekaItems = [];
@@ -13,23 +29,25 @@ hexo.extend.generator.register('eureka', function(locals) {
 
     eurekaItems = txtFiles.map(file => {
       const filePath = path.join(eurekaDir, file);
-      const stats = fs.statSync(filePath);
       const content = fs.readFileSync(filePath, 'utf8');
+      const createTimeMoment = parseTimestampFromFilename(file);
+
+      if (!createTimeMoment) {
+        throw new Error(`Invalid eureka filename format: ${file}. Expected format: yyyy-MM-DD-HH-MM-SS---X.txt`);
+      }
 
       // 格式化时间
-      const createTime = moment(stats.mtime).format('YYYY年MM月DD日 HH:mm');
+      const createTime = createTimeMoment.format('YYYY年MM月DD日 HH:mm');
 
       return {
         filename: file,
         content: content,
         createTime: createTime,
+        createTimeMoment: createTimeMoment,
       };
     }).sort((a, b) => {
       // 按创建时间倒序排列
-      // 由于我们格式化了时间，需要转换回moment对象进行比较
-      const aTime = moment(a.createTime, 'YYYY年MM月DD日 HH:mm');
-      const bTime = moment(b.createTime, 'YYYY年MM月DD日 HH:mm');
-      return bTime - aTime;
+      return b.createTimeMoment - a.createTimeMoment;
     });
   }
 
