@@ -68,9 +68,9 @@ jobs:
 
       - name: Create Eureka file
         run: |
-          FILEPATH="source/_eureka/${{ steps.generate-filename.outputs.filename }}"
-          mkdir -p source/_
-eureka
+          FILEPATH="source/_eureka/${{ steps.generate-filename
+.outputs.filename }}"
+          mkdir -p source/_eureka
           echo "${{ github.event.issue.body }}" > "$FILEPATH"
           echo "Created file: $FILEPATH"
 
@@ -102,7 +102,7 @@ eureka
 
       - name: Commit and push
         run: |
-          git add source/_eureka/${{ needs.create-eureka.outputs.filename }}
+          git add source/_eureka/${{ needs.create-eureka.outputs.filename }}"
           git commit -m "Add Eureka: ${{ github.event.issue.title }}"
           git push origin main
 
