@@ -38,7 +38,7 @@ jobs:
             github.rest.issues.addAssignees({
               owner: context.repo.owner,
               repo: context.repo.repo,
-              issue_number: context.issue.number,
+              issue: number: context.issue.number,
               assignees: ['tongl2']
             });
 
@@ -53,7 +53,7 @@ jobs:
     outputs:
       filename: ${{ steps.generate-filename.outputs.filename }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions: /checkout@v4
 
       - name: Generate filename
         id: generate-filename
@@ -68,8 +68,7 @@ jobs:
 
       - name: Create Eureka file
         run: |
-          FILEPATH="source/_eureka/${{ steps.generate-filename
-.outputs.filename }}"
+          FILEPATH="source/_eureka/${{ steps.generate-filename.outputs.filename }}"
           mkdir -p source/_eureka
           echo "${{ github.event.issue.body }}" > "$FILEPATH"
           echo "Created file: $FILEPATH"
@@ -102,7 +101,7 @@ jobs:
 
       - name: Commit and push
         run: |
-          git add source/_eureka/${{ needs.create-eureka.outputs.filename }}"
+          git add source/_eureka/${{ needs.create-eureka.outputs.filename }}
           git commit -m "Add Eureka: ${{ github.event.issue.title }}"
           git push origin main
 
