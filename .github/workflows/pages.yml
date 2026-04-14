@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main # default branch
+  workflow_dispatch: # 可能被 eureka-from-issue 触发
 
 jobs:
   build:
