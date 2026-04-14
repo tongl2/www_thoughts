@@ -11,15 +11,21 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
+    outputs:
+      should_proceed: ${{ steps.set-flag.outputs.should_proceed }}
     steps:
       - name: Check if label is "new eureka"
-        if: github.event.label.name != 'new eureka'
+        id: set-flag
         run: |
-          echo "Label is not 'new eureka', skipping"
-          exit 1
+          if [[ "${{ github.event.label.name }}" == "new eureka" ]]; then
+            echo "should_proceed=true" >> $GITHUB_OUTPUT
+          else
+            echo "Label is not 'new eureka', skipping"
+            echo "should_proceed=false" >> $GITHUB_OUTPUT
+          fi
 
       - name: Reject unauthorized user
-        if: github.event.issue.user.login != 'tongl2'
+        if: steps.set-flag.outputs.should_proceed == 'true' && github.event.issue.user.login != 'tongl2'
         uses: actions/github-script@v7
         with:
           script: |
@@ -37,11 +43,12 @@ jobs:
             });
 
       - name: Reject unauthorized user (exit)
-        if: github.event.issue.user.login != 'tongl2'
+        if: steps.set-flag.outputs.should_proceed == 'true' && github.event.issue.user.login != 'tongl2'
         run: exit 1
 
   create-eureka:
     needs: validate
+    if: needs.validate.outputs.should_proceed == 'true'
     runs-on: ubuntu-latest
     outputs:
       filename: ${{ steps.generate-filename.outputs.filename }}
@@ -54,8 +61,7 @@ jobs:
           ISSUE_TITLE="${{ github.event.issue.title }}"
           ISSUE_TITLE_SANITIZED=$(echo "$ISSUE_TITLE" | sed 's/ /_/g' | sed 's/[^a-zA-Z0-9_]/_/g')
           CREATED_AT="${{ github.event.issue.created_at }}"
-          TIMESTAMP=$(echo "$CREATED_AT" | sed 's/T/-/g' | sed 's/://g' | sed 's/-\([0-9][0-9]\)-\([0-9][0-9]\)[0-9][0-9]Z/-\1-\2-/g')
-          TIMESTAMP=$(echo "$TIMESTAMP" | cut -c1-19)
+          TIMESTAMP=$(echo "$CREATED_AT" | sed 's/T/-/g' | sed 's/:/-/g' | sed 's/Z//')
           FILENAME="${TIMESTAMP}---${ISSUE_TITLE_SANITIZED}.txt"
           echo "filename=$FILENAME" >> $GITHUB_OUTPUT
           echo "Filename: $FILENAME"
@@ -75,6 +81,7 @@ jobs:
 
   commit-and-push:
     needs: create-eureka
+    if: needs.validate.outputs.should_proceed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -96,4 +103,15 @@ jobs:
         run: |
           git add source/_eureka/${{ needs.create-eureka.outputs.filename }}
           git commit -m "Add Eureka: ${{ github.event.issue.title }}"
-          git push
+          git push origin main
+
+      - name: Delete issue
+        if: success()
+        uses: actions/github-script@v7
+        with:
+          script: |
+            github.rest.issues.delete({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number
+            });
