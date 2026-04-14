@@ -12,20 +12,20 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     outputs:
-      should_proceed: ${{ steps.set-flag.outputs.should_proceed }}
+      should_create_eureka: ${{ steps.set-flag.outputs.should_create_eureka }}
     steps:
       - name: Check if label is "new eureka"
         id: set-flag
         run: |
           if [[ "${{ github.event.label.name }}" == "new eureka" ]]; then
-            echo "should_proceed=true" >> $GITHUB_OUTPUT
+            echo "should_create_eureka=true" >> $GITHUB_OUTPUT
           else
             echo "Label is not 'new eureka', skipping"
-            echo "should_proceed=false" >> $GITHUB_OUTPUT
+            echo "should_create_eureka=false" >> $GITHUB_OUTPUT
           fi
 
       - name: Reject unauthorized user
-        if: steps.set-flag.outputs.should_proceed == 'true' && github.event.issue.user.login != 'tongl2'
+        if: steps.set-flag.outputs.should_create_eureka == 'true' && github.event.issue.user.login != 'tongl2'
         uses: actions/github-script@v7
         with:
           script: |
@@ -43,12 +43,12 @@ jobs:
             });
 
       - name: Reject unauthorized user (exit)
-        if: steps.set-flag.outputs.should_proceed == 'true' && github.event.issue.user.login != 'tongl2'
+        if: steps.set-flag.outputs.should_create_eureka == 'true' && github.event.issue.user.login != 'tongl2'
         run: exit 1
 
   create-eureka:
     needs: validate
-    if: needs.validate.outputs.should_proceed == 'true'
+    if: needs.validate.outputs.should_create_eureka == 'true'
     runs-on: ubuntu-latest
     outputs:
       filename: ${{ steps.generate-filename.outputs.filename }}
@@ -81,7 +81,6 @@ jobs:
 
   commit-and-push:
     needs: create-eureka
-    if: needs.validate.outputs.should_proceed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
