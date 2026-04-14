@@ -4,7 +4,7 @@ const moment = require('moment');
 moment.locale('zh-cn');
 
 // 从文件名中解析时间戳
-// 文件名格式: yyyy-MM-DD-HH-MM-SS---X.txt
+// 文件名格式: yyyy-MM-DD-HH-MM-SS---X.txt (UTC时间)
 function parseTimestampFromFilename(filename) {
   const separator = '---';
   const separatorIndex = filename.indexOf(separator);
@@ -14,7 +14,7 @@ function parseTimestampFromFilename(filename) {
   }
 
   const timestampStr = filename.substring(0, separatorIndex);
-  const time = moment(timestampStr, 'YYYY-MM-DD-HH-mm-ss');
+  const time = moment.utc(timestampStr, 'YYYY-MM-DD-HH-mm-ss');
 
   return time.isValid() ? time : null;
 }
@@ -36,13 +36,13 @@ hexo.extend.generator.register('eureka', function(locals) {
         throw new Error(`Invalid eureka filename format: ${file}. Expected format: yyyy-MM-DD-HH-MM-SS---X.txt`);
       }
 
-      // 格式化时间
-      const createTime = createTimeMoment.format('YYYY年MM月DD日 HH:mm');
+      // 输出ISO 8601格式的UTC时间戳
+      const createTimeUtc = createTimeMoment.toISOString();
 
       return {
         filename: file,
         content: content,
-        createTime: createTime,
+        createTimeUtc: createTimeUtc,
         createTimeMoment: createTimeMoment,
       };
     }).sort((a, b) => {
@@ -59,8 +59,8 @@ hexo.extend.generator.register('eureka', function(locals) {
         <div class="eureka-item card mb-3">
           <div class="card-body">
             <div class="eureka-item-content">${item.content}</div>
-            <div class="eureka-item-date small text-muted mt-2">
-              发布于 ${item.createTime}
+            <div class="eureka-item-date small text-muted mt-2" data-utc-time="${item.createTimeUtc}">
+              发布于 <span class="eureka-local-time"></span>
             </div>
           </div>
         </div>`;
@@ -97,7 +97,36 @@ hexo.extend.generator.register('eureka', function(locals) {
     .eureka-item-date {
       font-size: 0.85rem;
     }
-    </style>`;
+    </style>
+
+    <script>
+    (function() {
+      function padZero(num) {
+        return num.toString().padStart(2, '0');
+      }
+
+      function formatLocalTime(date) {
+        const year = date.getFullYear();
+        const month = padZero(date.getMonth() + 1);
+        const day = padZero(date.getDate());
+        const hours = padZero(date.getHours());
+        const minutes = padZero(date.getMinutes());
+        return year + '年' + month + '月' + day + '日 ' + hours + ':' + minutes;
+      }
+
+      document.addEventListener('DOMContentLoaded', function() {
+        const dateElements = document.querySelectorAll('.eureka-item-date[data-utc-time]');
+        dateElements.forEach(function(el) {
+          const utcTime = el.getAttribute('data-utc-time');
+          const date = new Date(utcTime);
+          const localTimeSpan = el.querySelector('.eureka-local-time');
+          if (localTimeSpan && !isNaN(date.getTime())) {
+            localTimeSpan.textContent = formatLocalTime(date);
+          }
+        });
+      });
+    })();
+    </script>`;
 
   return {
     path: 'eureka/index.html',
