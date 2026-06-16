@@ -11,6 +11,7 @@ tags:
   - LLM
   - Transformers
 categories:
+    - 技术积累
 ---
 
 # Recap：线性层训练过程、GPU内存与DP并行
