@@ -131,7 +131,7 @@ hexo.extend.generator.register('eureka', function(locals) {
   return {
     path: 'eureka/index.html',
     data: {
-      title: 'Eureka',
+      title: 'Eureka!',
       content: content
     },
     layout: ['page']
