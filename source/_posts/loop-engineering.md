@@ -1,6 +1,6 @@
 ---
 title: 循环工程（Loop Engineering）
-author: Addy Osmani (刘通 译)
+author: Addy Osmani (Tong 译)
 date: 2026-06-26 15:30
 updated: 2026-06-26 17:54
 tags:

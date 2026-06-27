@@ -13,7 +13,7 @@
 ```yaml
 ---
 title: 中文标题（英文原标题可括注）
-author: 原作者名（刘通 译）
+author: 原作者名（Tong 译）
 date: YYYY-MM-DD HH:MM
 tags:
   - 标签1
@@ -23,7 +23,7 @@ categories:
 ---
 ```
 
-- `author`：翻译类写「原作者（刘通 译）」。
+- `author`：翻译类写「原作者（Tong 译）」。
 - `date`：用翻译/发布当天的日期时间。
 
 ## 正文结构

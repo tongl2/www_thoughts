@@ -1,6 +1,6 @@
 ---
 title: 代码走读：FSDP叠加TorchAO Float8低精训练
-author: 刘通
+author: Tong
 date: 2026-3-19 21:36
 updated: 2026-3-27 11:52
 tags:

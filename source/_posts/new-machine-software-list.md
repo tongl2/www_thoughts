@@ -1,6 +1,6 @@
 ---
 title: 新机必装软件列表
-author: 刘通
+author: Tong
 date: 2026-06-16 15:52
 tags:
   - Windows

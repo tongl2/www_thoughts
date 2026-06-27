@@ -40,7 +40,7 @@ description: 用于将外文技术博客翻译为本仓库（Hexo）的中文 po
 
 7. **按定稿术语 + 项目格式写全文**。保留原文标题层级、清单、表格、分隔线。
 8. **链接资源按原位置保留**，指向相同 URL；图片同样保留 `src` 与 `alt`。
-9. **套用翻译类 post 固定头尾**：译者按（引用块）+ 作者简介（含 Twitter），`author` 写「原作者（刘通 译）」，结尾加 AI 标识。详见 [references/post-format.md](./references/post-format.md)。
+9. **套用翻译类 post 固定头尾**：译者按（引用块）+ 作者简介（含 Twitter），`author` 写「原作者（Tong 译）」，结尾加 AI 标识。详见 [references/post-format.md](./references/post-format.md)。
 10. **停下，等用户人工检查并确认 OK**。用户没明确放行前，不进入提交。
 
 ### 阶段四：收尾

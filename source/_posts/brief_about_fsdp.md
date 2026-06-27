@@ -1,6 +1,6 @@
 ---
 title: FSDP简介
-author: 刘通
+author: Tong
 date: 2026-3-17 16:30
 updated: 2026-3-19 20:24
 tags:
